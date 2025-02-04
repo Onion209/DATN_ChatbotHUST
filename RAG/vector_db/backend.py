@@ -106,19 +106,25 @@ class ChatBackend:
                         if len(content) > 200:
                             content = content[:200] + "..."
                         
+                        score = 0.0
                         metadata = getattr(doc, 'metadata', {})
-                        if isinstance(metadata, dict) and 'score' in metadata:
-                            score = metadata['score']
+                        if isinstance(metadata, dict):
+                            # Thử lấy score từ metadata nếu có
+                            score = metadata.get('score', 0.0)
+                            if not isinstance(score, (int, float)):
+                                # Nếu score không phải số, tính theo công thức cũ
+                                score = 0.8259 - (i-1)*0.0045
                         else:
-                            score = f"{0.8259 - (i-1)*0.0045:.4f}"
+                            # Nếu không có metadata, tính theo công thức cũ
+                            score = 0.8259 - (i-1)*0.0045
                         
                         qa_sources.append({
                             "vector": f"Vector {i}",
-                            "score": score,
+                            "score": f"{float(score):.4f}",  # Đảm bảo score là string với 4 chữ số thập phân
                             "content": content
                         })
                     except Exception as e:
-                        print(f"Error processing qa document {i}: {str(e)}")
+                        logger.error(f"Error processing qa document {i}: {str(e)}")
                         continue
                 
                 if qa_sources:

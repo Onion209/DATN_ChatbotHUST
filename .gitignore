@@ -7,7 +7,6 @@ __pycache__/
 *.so
 
 myenv/
-RAG/Fine_tuning
 .history/
 
 
