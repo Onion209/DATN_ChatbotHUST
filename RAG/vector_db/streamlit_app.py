@@ -6,6 +6,7 @@ from datetime import datetime
 import logging  # Thêm import logging
 import warnings
 import sys
+import time
 
 # Cấu hình logging
 logging.basicConfig(level=logging.ERROR)
@@ -100,9 +101,9 @@ with st.sidebar:
     if st.button("🆕 New Chat"):
         new_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         st.session_state.conversations[new_id] = {
-            "title": f"Chat {len(st.session_state.conversations) + 1}",
+            "title": "New Chat",  # Đặt tiêu đề tạm thời
             "messages": [],
-            "model_config": st.session_state.current_model_config.copy()  # Lưu cấu hình model cho chat này
+            "model_config": st.session_state.current_model_config.copy()
         }
         st.session_state.current_conversation_id = new_id
         st.session_state.chat_history = []
@@ -138,7 +139,9 @@ with st.sidebar:
         for conv_id, conv_data in st.session_state.conversations.items():
             col1, col2 = st.columns([4, 1])
             with col1:
-                if st.button(f"📝 {conv_data['title']}", key=f"conv_{conv_id}"):
+                # Hiển thị tiêu đề là câu hỏi đầu tiên hoặc "New Chat" nếu chưa có câu hỏi
+                display_title = conv_data.get('title', 'New Chat')
+                if st.button(f"📝 {display_title}", key=f"conv_{conv_id}"):
                     st.session_state.current_conversation_id = conv_id
                     st.session_state.chat_history = conv_data['messages']
                     # Thiết lập lại backend với model config hiện tại
@@ -190,8 +193,8 @@ for message in st.session_state.chat_history:
                 if isinstance(source, dict):  # Kiểm tra nếu source là dictionary
                     st.markdown(f"**{source['name']}**")
                     
-                    for vector in source["vectors"]:
-                        st.markdown(f"Vector {vector['number']} (Score: {vector['score']})")
+                    for i, vector in enumerate(source['vectors'], 1):
+                        st.markdown(f"Vector {i} (Score: {vector['score']})")
                         st.markdown(f"{vector['content']}")
                         st.markdown("---")
                 else:  # Nếu source là string
@@ -201,19 +204,36 @@ for message in st.session_state.chat_history:
 user_input = st.chat_input("Hãy đặt câu hỏi về tuyển sinh...")
 
 if user_input and st.session_state.current_conversation_id:
-    # Hiển thị câu hỏi của user
+    current_chat = st.session_state.conversations[st.session_state.current_conversation_id]
+    
+    # Thêm tin nhắn của user vào messages và chat_history
     st.session_state.chat_history.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.markdown(user_input)
     
-    # Xử lý câu trả lời
+    # Nếu đây là tin nhắn đầu tiên, cập nhật tiêu đề
+    if len(current_chat["messages"]) == 0:
+        title = user_input if len(user_input) <= 50 else user_input[:47] + "..."
+        current_chat["title"] = title
+        current_chat["messages"] = st.session_state.chat_history.copy()
+        st.session_state.conversations[st.session_state.current_conversation_id] = current_chat
+        st.rerun()
+    
+    # Xử lý câu trả lời với status messages
     with st.chat_message("assistant"):
+        message_placeholder = st.empty()
+        status_placeholder = st.empty()
+        
         try:
+            # Hiển thị trạng thái "Đang suy nghĩ..."
+            status_placeholder.info("🤔 Đang phân tích câu hỏi của bạn...")
+            time.sleep(1)  # Thêm delay để người dùng có thể đọc thông báo
+            
             # Đảm bảo backend đang sử dụng đúng model
-            current_chat = st.session_state.conversations[st.session_state.current_conversation_id]
             if ('model_config' not in current_chat or 
                 current_chat['model_config'] != st.session_state.current_model_config):
-                # Khởi tạo lại backend nếu model config không khớp
+                status_placeholder.info("⚙️ Đang cấu hình lại model...")
+                time.sleep(1)
                 st.session_state.backend = ChatBackend()
                 st.session_state.backend.setup_qa_chain(
                     llm_model_choice=st.session_state.current_model_config['llm_model'],
@@ -221,54 +241,51 @@ if user_input and st.session_state.current_conversation_id:
                 )
                 current_chat['model_config'] = st.session_state.current_model_config.copy()
             
-            # Sử dụng model config đã lưu trong session state
+            # Hiển thị trạng thái "Đang tìm kiếm..."
+            status_placeholder.info("🔍 Đang tìm kiếm thông tin liên quan...")
+            time.sleep(1)
+            
+            # Gọi backend để lấy câu trả lời
             result = st.session_state.backend.get_chat_response(
                 user_input,
                 model_choice=current_chat['model_config']['llm_model']
             )
             
-            # Hiển thị câu trả lời
-            st.markdown(result['answer'])
+            # Hiển thị trạng thái "Đang tổng hợp..."
+            status_placeholder.info("📝 Đang tổng hợp câu trả lời...")
             
-            # Hiển thị nguồn tham khảo
-            if result['sources']:
+            # Xóa status message
+            status_placeholder.empty()
+            
+            # Hiển thị câu trả lời
+            message_placeholder.markdown(result['answer'])
+            
+            # Hiển thị nguồn tham khảo nếu có
+            if 'sources' in result and result['sources']:
                 st.markdown("**Nguồn tham khảo:**")
                 for source in result['sources']:
-                    st.markdown(f"**{source['name']}**")
-                    
-                    # Hiển thị từng vector với score
-                    for i, vector in enumerate(source['vectors'], 1):
-                        st.markdown(f"Vector {i} (Score: {vector['score']})")
-                        st.markdown(f"{vector['content']}")
-                        st.markdown("---")
+                    if isinstance(source, dict):
+                        st.markdown(f"**{source.get('name', 'Unknown')}**")
+                        for i, vector in enumerate(source.get('vectors', []), 1):
+                            st.markdown(f"Vector {i} (Score: {vector.get('score', 'N/A')})")
+                            st.markdown(f"{vector.get('content', '')}")
+                            st.markdown("---")
+                    else:
+                        st.markdown(f"**{source}**")
             
-            # Lưu vào lịch sử
-            message = {
-                "role": "assistant", 
+            # Lưu vào messages của current chat
+            assistant_response = {
+                "role": "assistant",
                 "content": result['answer'],
-                "sources": []
+                "sources": result.get('sources', [])
             }
-
-            # Định dạng lại sources để lưu vào lịch sử
-            if result['sources']:
-                for source in result['sources']:
-                    source_data = {
-                        "name": source['name'],
-                        "vectors": []
-                    }
-                    for i, vector in enumerate(source['vectors'], 1):
-                        source_data["vectors"].append({
-                            "number": i,
-                            "score": vector['score'],
-                            "content": vector['content']
-                        })
-                    message["sources"].append(source_data)
-
-            st.session_state.chat_history.append(message)
-            st.session_state.conversations[st.session_state.current_conversation_id]["messages"] = st.session_state.chat_history
+            st.session_state.chat_history.append(assistant_response)
+            current_chat["messages"] = st.session_state.chat_history.copy()
+            st.session_state.conversations[st.session_state.current_conversation_id] = current_chat
 
         except Exception as e:
-            st.error(f"Error generating response: {str(e)}")
+            status_placeholder.empty()
+            st.error(f"❌ Có lỗi xảy ra: {str(e)}")
             logger.error(f"Error details: {str(e)}")
 
 def on_shutdown():
