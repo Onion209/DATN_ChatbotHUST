@@ -8,6 +8,7 @@ __pycache__/
 
 myenv/
 RAG/Fine_tuning
+.history/
 
 
 # Distribution / packaging
