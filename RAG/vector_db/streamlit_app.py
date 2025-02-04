@@ -182,10 +182,20 @@ if "chat_history" not in st.session_state:
 for message in st.session_state.chat_history:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-        if "sources" in message:
+        
+        if "sources" in message and message["sources"]:
             st.markdown("**Nguồn tham khảo:**")
+            
             for source in message["sources"]:
-                st.markdown(f"- {source}")
+                if isinstance(source, dict):  # Kiểm tra nếu source là dictionary
+                    st.markdown(f"**{source['name']}**")
+                    
+                    for vector in source["vectors"]:
+                        st.markdown(f"Vector {vector['number']} (Score: {vector['score']})")
+                        st.markdown(f"{vector['content']}")
+                        st.markdown("---")
+                else:  # Nếu source là string
+                    st.markdown(f"**{source}**")
 
 # Xử lý input từ người dùng
 user_input = st.chat_input("Hãy đặt câu hỏi về tuyển sinh...")
@@ -225,16 +235,35 @@ if user_input and st.session_state.current_conversation_id:
                 st.markdown("**Nguồn tham khảo:**")
                 for source in result['sources']:
                     st.markdown(f"**{source['name']}**")
-                    for vector in source['vectors']:
-                        st.markdown(f"- {vector['vector']} (Score: {vector['score']})")
-                        st.markdown(f"  *{vector['content']}*")
+                    
+                    # Hiển thị từng vector với score
+                    for i, vector in enumerate(source['vectors'], 1):
+                        st.markdown(f"Vector {i} (Score: {vector['score']})")
+                        st.markdown(f"{vector['content']}")
+                        st.markdown("---")
             
             # Lưu vào lịch sử
             message = {
                 "role": "assistant", 
                 "content": result['answer'],
-                "sources": [f"{source['name']}" for source in result['sources']] if result['sources'] else []
+                "sources": []
             }
+
+            # Định dạng lại sources để lưu vào lịch sử
+            if result['sources']:
+                for source in result['sources']:
+                    source_data = {
+                        "name": source['name'],
+                        "vectors": []
+                    }
+                    for i, vector in enumerate(source['vectors'], 1):
+                        source_data["vectors"].append({
+                            "number": i,
+                            "score": vector['score'],
+                            "content": vector['content']
+                        })
+                    message["sources"].append(source_data)
+
             st.session_state.chat_history.append(message)
             st.session_state.conversations[st.session_state.current_conversation_id]["messages"] = st.session_state.chat_history
 
