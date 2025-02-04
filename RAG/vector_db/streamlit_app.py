@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 import logging  # Thêm import logging
 import warnings
+import sys
 
 # Cấu hình logging
 logging.basicConfig(level=logging.ERROR)
@@ -50,13 +51,29 @@ with st.sidebar:
         "Choose LLM Model",
         ["gpt-4o-mini", "llama"],
         index=0,
-        help="gpt-4o-mini uses OpenAI's API. llama uses a locally fine-tuned model."
+        help="gpt-4o-mini uses OpenAI's API. llama uses local model from @models folder"
     )
     
     # Nút để áp dụng cấu hình
     if st.button("Apply Configuration"):
         with st.spinner("Loading model... This may take a few moments."):
             try:
+                # Kiểm tra model path nếu chọn llama
+                if llm_model == "llama":
+                    model_path = "D:/datn/RAG/Fine_tuning/models"  # Thư mục chứa adapter model
+                    required_files = [
+                        "adapter_config.json",
+                        "adapter_model.safetensors",
+                        "tokenizer.json",
+                        "special_tokens_map.json",
+                        "tokenizer_config.json"
+                    ]
+                    
+                    # Kiểm tra sự tồn tại của các file cần thiết
+                    for file in required_files:
+                        if not os.path.exists(os.path.join(model_path, file)):
+                            raise ValueError(f"Không tìm thấy file {file} trong thư mục model")
+
                 st.session_state.backend.setup_qa_chain(
                     embedding_model_choice=embedding_model,
                     llm_model_choice=llm_model
@@ -214,9 +231,9 @@ if user_input and st.session_state.current_conversation_id:
             
             # Lưu vào lịch sử
             message = {
-                "role": "assistant",
+                "role": "assistant", 
                 "content": result['answer'],
-                "sources": [f"{os.path.basename(s['name'])} (Score: {s['score']})" for s in result['sources']]
+                "sources": [f"{source['name']}" for source in result['sources']] if result['sources'] else []
             }
             st.session_state.chat_history.append(message)
             st.session_state.conversations[st.session_state.current_conversation_id]["messages"] = st.session_state.chat_history
@@ -234,5 +251,6 @@ if __name__ == "__main__":
         warnings.filterwarnings('ignore', category=UserWarning)
         warnings.filterwarnings('ignore', message='.*torch.classes.*')
         on_shutdown()
+        print(sys.path)
     except Exception as e:
         st.error(f"Error during cleanup: {str(e)}")
