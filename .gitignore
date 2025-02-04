@@ -165,9 +165,3 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
-chroma_db/
-data/
-config.json
-Q&A/
-unsloth_env/
-training_data.json
