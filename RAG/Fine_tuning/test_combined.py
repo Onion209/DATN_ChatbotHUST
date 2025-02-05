@@ -6,12 +6,14 @@ from peft import PeftModel, PeftConfig
 import sys
 import json
 import gc
+from langchain.prompts import PromptTemplate
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from vector_db.model import (
     classify_question_domain,
     load_vector_db,
     get_relevant_chunks
 )
+from search_web import test_search
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -96,53 +98,84 @@ def load_config():
         logger.error(f"Error loading config: {str(e)}")
         raise
 
-def create_prompt(context: str, question: str) -> str:
-    return f"""Bạn là giáo viên phòng tư vấn tuyển sinh của trường Đại học Bách Khoa Hà Nội.
-    Sử dụng thông tin sau đây để trả lời câu hỏi một cách chính xác và ngắn gọn, truyền tải đầy đủ thông tin bạn nhận được.
-    Hãy nói với vai trò là một thầy cô giáo trong trường, sử dụng ngôn ngữ thân thiện và dễ hiểu.
+def create_prompt(context: str, question: str, web_url: str = None) -> str:
+    template = """Bạn là giáo viên phòng tư vấn tuyển sinh của trường Đại học Bách Khoa Hà Nội.
+    Sử dụng thông tin sau đây để trả lời câu hỏi một cách chính xác và có cấu trúc, theo format sau:
+    1. Chỉ trả lời những thông tin liên quan trực tiếp đến câu hỏi
+    2. Nếu là điểm chuẩn, cần nêu rõ: điểm số, mã ngành, tên ngành và phương thức xét tuyển
+    3. Thông tin phải được trích dẫn từ context được cung cấp
+    4. Không thêm thông tin không có trong context
+    
+    Nếu không tìm thấy thông tin trong context hoặc thông tin không đầy đủ, hãy trả lời:
+    "Xin lỗi, hiện tại tôi không có thông tin chính xác về điều này. Tuy nhiên, bạn có thể tham khảo thông tin mới nhất tại: {web_url}"
     
     Context: {context}
     
     Question: {question}
     
     Answer: """
+    
+    prompt = PromptTemplate(
+        template=template,
+        input_variables=["context", "question", "web_url"]
+    )
+    return prompt.format(context=context, question=question, web_url=web_url)
 
 def test_combined(question: str):
     try:
-        # Load config và khởi tạo
+        # 1. Khởi tạo và cấu hình
         config = load_config()
         api_key = config.get("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("API key not found in config")
 
-        # Phân loại domain và lấy chunks
+        # 2. Phân loại domain và tìm kiếm web
         domain = classify_question_domain(question)
         print(f"\nDomain được phân loại: {domain}")
+        web_url = test_search(question)
         
+        # 3. Load vector databases
         domain_db, qa_db = load_vector_db(api_key, domain)
         print("Đã load vector databases")
         
-        chunks = get_relevant_chunks(question, domain_db, qa_db)
-        if not chunks:
-            return "Xin lỗi em, thông tin này hiện tại cô/thầy chưa có..."
+        # 4. Lấy chunks với relevance scores (k=3 mặc định)
+        documents = get_relevant_chunks(question, domain_db, qa_db)
+        
+        # 5. Xử lý trường hợp không có chunks
+        if not documents:
+            fallback_message = (
+                f"Xin lỗi, hiện tại hệ thống của tôi không thể lấy dữ liệu từ cơ sở dữ liệu. "
+                f"Tuy nhiên, bạn có thể tìm kiếm thông tin ở liên kết sau: {web_url}. "
+                f"Nếu cần hỗ trợ thêm, hãy cho tôi biết nhé!"
+            )
+            return fallback_message
 
-        # Tạo context từ chunks
+        # 6. Tạo context từ documents và lọc theo độ tin cậy
         context_parts = []
         sources = set()
         
-        for chunk in chunks:
-            context_parts.append(chunk.page_content)
-            source = chunk.metadata.get('source')
-            page = chunk.metadata.get('page')
-            if source and source != 'Unknown':
-                if page and page != 'Unknown':
-                    sources.add(f"{source} (trang {page})")
-                else:
-                    sources.add(source)
+        for doc in documents:
+            score = float(doc.metadata.get('score', 0))
+            if score >= 0.7:  # Chỉ lấy những document có độ tin cậy từ 0.7 trở lên
+                context_parts.append(doc.page_content)
+                metadata = doc.metadata
+                source_info = []
+                
+                source = metadata.get('source')
+                page = metadata.get('page')
+                
+                if source and source != 'Unknown':
+                    if page and page != 'Unknown':
+                        source_info.append(f"{source} (trang {page})")
+                    else:
+                        source_info.append(source)
+                
+                if source_info:
+                    sources.add(", ".join(source_info))
 
-        # Tạo prompt và sinh câu trả lời
+        # 7. Tạo câu trả lời
         context = "\n".join(context_parts)
-        prompt = create_prompt(context, question)
+        prompt = create_prompt(context, question, web_url)
         
         model_manager = ModelManager()
         model_manager.clean_gpu_memory()
@@ -150,10 +183,12 @@ def test_combined(question: str):
         response = model_manager._pipe(prompt)[0]['generated_text']
         model_manager.clean_gpu_memory()
         
-        # Format câu trả lời với nguồn
+        # 8. Format câu trả lời cuối cùng
         answer = response.strip()
         if sources:
-            answer += "\n\nThông tin được trích từ: " + ", ".join(sources)
+            answer += "\n\nNguồn tham khảo: " + "; ".join(sources)
+        if web_url:
+            answer += f"\n\nBạn có thể tham khảo thêm thông tin mới nhất tại: {web_url}"
             
         return answer
 
