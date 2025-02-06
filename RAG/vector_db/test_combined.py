@@ -98,7 +98,7 @@ def load_config():
         logger.error(f"Error loading config: {str(e)}")
         raise
 
-def create_prompt(context: str, question: str, web_url: str = None) -> str:
+def create_prompt_combined(context: str, question: str, web_url: str = None) -> str:
     template = """Bạn là giáo viên phòng tư vấn tuyển sinh của trường Đại học Bách Khoa Hà Nội.
     Sử dụng thông tin sau đây để trả lời câu hỏi một cách chính xác và có cấu trúc, theo format sau:
     1. Chỉ trả lời những thông tin liên quan trực tiếp đến câu hỏi
@@ -114,7 +114,6 @@ def create_prompt(context: str, question: str, web_url: str = None) -> str:
     Question: {question}
     
     Answer: """
-    
     prompt = PromptTemplate(
         template=template,
         input_variables=["context", "question", "web_url"]
@@ -175,7 +174,7 @@ def test_combined(question: str):
 
         # 7. Tạo câu trả lời
         context = "\n".join(context_parts)
-        prompt = create_prompt(context, question, web_url)
+        prompt = create_prompt_combined(context, question, web_url)
         
         model_manager = ModelManager()
         model_manager.clean_gpu_memory()

@@ -6,7 +6,7 @@ from langchain.prompts import PromptTemplate
 from langchain_community.vectorstores import Chroma
 import warnings
 import streamlit as st
-from transformers import pipeline
+from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
 from huggingface_hub import login
 from langchain_community.llms import HuggingFacePipeline
 import torch
@@ -16,6 +16,7 @@ from typing import List, Any
 import logging
 import gc
 from search_web import test_search
+from peft import PeftModel, PeftConfig
 
 # Cấu hình logging
 logging.basicConfig(level=logging.ERROR)
@@ -43,19 +44,69 @@ def load_model(api_key, model_type="gpt-4o-mini"):
                 openai_api_key=api_key
             )
         elif model_type == "llama":
-            login(token=api_key)
+            # Dọn bộ nhớ GPU nếu có
+            if torch.cuda.is_available():
+                clear_gpu_memory()
+                logger.info(f"Using GPU: {torch.cuda.get_device_name(0)}")
+            
+            # Lấy đường dẫn đến thư mục models
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            adapter_path = os.path.join(current_dir, "..", "Fine_tuning", "models")
+            
+            # Load cấu hình PEFT và lấy tên mô hình cơ sở
+            peft_config = PeftConfig.from_pretrained(adapter_path)
+            base_model_name = peft_config.base_model_name_or_path
+            
+            # Load mô hình cơ sở
+            base_model = AutoModelForCausalLM.from_pretrained(
+                base_model_name,
+                torch_dtype=torch.float16,
+                device_map="auto",
+                trust_remote_code=True,
+                load_in_8bit=True
+            )
+            
+            # Load tokenizer
+            tokenizer = AutoTokenizer.from_pretrained(base_model_name)
+            tokenizer.pad_token = tokenizer.eos_token
+            
+            # Load adapter weights
+            model = PeftModel.from_pretrained(
+                base_model,
+                adapter_path,
+                torch_dtype=torch.float16,
+                device_map="auto"
+            )
+            
+            # Tạo pipeline
             pipe = pipeline(
                 "text-generation",
-                model="meta-llama/Llama-2-7b-chat-hf",
-                token=api_key,
-                temperature=0.5,
-                max_length=2048,
+                model=model,
+                tokenizer=tokenizer,
+                max_new_tokens=512,
+                temperature=0.7,
                 top_p=0.95,
-                repetition_penalty=1.15
+                repetition_penalty=1.15,
+                return_full_text=False,
+                truncation=True
             )
-            return HuggingFacePipeline(pipeline=pipe)
+            
+            # Tạo một class wrapper để match với interface của ChatOpenAI
+            class LlamaWrapper:
+                def __init__(self, pipe):
+                    self._pipe = pipe
+                
+                def clean_gpu_memory(self):
+                    clear_gpu_memory()
+                
+                def __call__(self, prompt):
+                    return self._pipe(prompt)[0]['generated_text']
+            
+            return LlamaWrapper(pipe)
+            
         else:
             raise ValueError(f"Unknown model type: {model_type}")
+            
     except Exception as e:
         logger.error(f"Error loading model: {str(e)}")
         raise
@@ -121,4 +172,3 @@ def clear_gpu_memory():
     torch.cuda.empty_cache()
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
-
