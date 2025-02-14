@@ -127,10 +127,14 @@ def google_search(query: str, api_key: str, search_engine_id: str, num_results: 
         return []
 
 def test_search(question):
-    API_KEY = "AIzaSyD9VGCD2gPfTD3SB0VaqKN0Atal4w0msBM"  # API key của bạn từ Google Cloud Console
-    SEARCH_ENGINE_ID = "d3776215e80c949ef"  # Search Engine ID của bạn
+    API_KEY = "AIzaSyCqt0PNREnSBj5i4tPck91LIsoZJfGxnU0"
+    SEARCH_ENGINE_ID = "d3776215e80c949ef"
     
     test_query = question
     results = google_search(test_query, API_KEY, SEARCH_ENGINE_ID)
     result = results[0]
     return result['link']
+
+if __name__ == "__main__":
+    question = "Em muốn tìm hiểu về chương trình Kỹ thuật Sinh học, em có thể liên hệ với ai ạ?"
+    print(test_search(question))

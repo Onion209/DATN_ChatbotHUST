@@ -9,12 +9,16 @@ from model import (
     create_prompt,
     create_qa_chain,
     get_relevant_chunks,
+    load_config,
     CustomRetriever
 )
-from test_combined import create_prompt_combined, test_combined, ModelManager, load_config as load_config_combined
+# from test_combined import create_prompt_combined, test_combined, ModelManager, load_config as load_config_combined
 from search_web import test_search
+from chatbot import generate_response, create_prompt_llama, get_data_with_context  # Nhập các hàm từ chatbot.py
 import logging
 import os
+import torch
+import gc
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +29,13 @@ class ChatBackend:
         self.config = load_config()
         self.chat_history = []  # Thêm biến lưu lịch sử chat
         
+    @staticmethod
+    def clean_gpu_memory():
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            gc.collect()
+            logger.info("Cleaned GPU memory")
+
     def setup_qa_chain(self, embedding_model_choice="OpenAI", llm_model_choice="gpt-4o-mini"):
         try:
             api_key = self.config.get('OPENAI_API_KEY') if llm_model_choice == "gpt-4o-mini" else self.config.get('HUGGINGFACE_TOKEN')
@@ -167,62 +178,30 @@ class ChatBackend:
                 }
         if model_choice == "llama":
             try:
-                api_key = self.config.get('OPENAI_API_KEY') 
-                # Log để debug
-                logger.info(f"Processing query with model: {model_choice}")
-                
-                # Phân loại domain và lấy dữ liệu
+                self.clean_gpu_memory()  # Dọn dẹp bộ nhớ GPU trước khi xử lý
                 domain = classify_question_domain(query)
                 logger.info(f"Classified domain: {domain}")
                 
+                # Khởi tạo domain_db và qa_db
+                api_key = self.config.get('OPENAI_API_KEY')
                 domain_db, qa_db = load_vector_db(api_key, domain)
-                web_url = test_search(query)
                 
-                # Lấy documents từ vector DB
                 documents = get_relevant_chunks(query, domain_db, qa_db)
-                logger.info(f"Retrieved {len(documents)} documents")
+                context, web_url, sources = get_data_with_context(query)
                 
-                # Xử lý documents trước khi tạo context
-                context_parts = []
-                sources = set()
-                
-                for doc in documents:
-                    score = float(doc.metadata.get('score', 0))
-                    if score >= 0.9:
-                        context_parts.append(doc.page_content)
-                        metadata = doc.metadata
-                        source_info = []
-                        
-                        source = metadata.get('source', 'Unknown')
-                        page = metadata.get('page', 'Unknown')
-                        source_name = self.get_file_name(source)
-                        
-                        if source_name != "Unknown":
-                            if page != "Unknown":
-                                source_info.append(f"{source_name} (trang {page})")
-                            else:
-                                source_info.append(source_name)
-                        
-                        if source_info:
-                            sources.add(", ".join(source_info))
-
                 if not documents:
                     fallback_message = (
-                        f"Xin lỗi, hiện tại hệ thống của tôi không thể lấy dữ liệu từ cơ sở dữ liệu. "
-                        f"Tuy nhiên, bạn có thể tìm kiếm thông tin ở liên kết sau: {web_url}. "
-                        f"Nếu cần hỗ trợ thêm, hãy cho tôi biết nhé!"
+                        f"Xin lỗi, hiện tại hệ thống của tôi không thể lấy dữ liệu từ cơ sở dữ liệu. Tuy nhiên, bạn có thể tìm kiếm thông tin ở liên kết sau: {web_url}. Nếu cần hỗ trợ thêm, hãy cho tôi biết nhé!"
                     )
                     return {
                         "answer": fallback_message,
                         "sources": [],
-                        "domain": self.get_domain_name(domain)
+                        "domain": domain
                     }
-
-                context = "\n".join(context_parts)
-                logger.info(f"Created context with length: {len(context)}")
-                model_manager = ModelManager()
-                prompt = create_prompt_combined(context, query, web_url)
-                response = model_manager._pipe(prompt)[0]['generated_text']
+                
+                prompt = create_prompt_llama(query, context)  # Tạo prompt từ chatbot.py
+                response = generate_response(prompt)  # Gọi hàm generate_response từ chatbot.py
+                
                 answer = response.strip()
                 
                 # Thêm nguồn tham khảo và URL
@@ -232,7 +211,7 @@ class ChatBackend:
                     answer += f"\n\nBạn có thể tham khảo thêm thông tin mới nhất tại: {web_url}"
                 
                 # Dọn dẹp bộ nhớ GPU
-                model_manager.clean_gpu_memory()
+                self.clean_gpu_memory()
                 return {
                     "answer": answer,
                     "sources": list(sources),

@@ -271,12 +271,22 @@ def get_answer(question, model_type="gpt-4o-mini"):
             raise Exception(f"API key not found for {model_type} in config.json")
         
         domain = classify_question_domain(question)
+        print(f"\nDomain được phân loại: {domain}")
+        
         model = load_model(api_key, model_type)
         domain_db, qa_db = load_vector_db(api_key, domain)
         web_url = test_search(question)
         
         # Lấy documents và kiểm tra
         documents = get_relevant_chunks(question, domain_db, qa_db)
+        print("\nCác chunks được tìm thấy:")
+        for i, doc in enumerate(documents, 1):
+            print(f"\n--- Chunk {i} ---")
+            print(f"Nội dung: {doc.page_content}")
+            print("Metadata:")
+            for key, value in doc.metadata.items():
+                print(f"  {key}: {value}")
+                
         if not documents:
             fallback_message = (
                 f"Xin lỗi, hiện tại hệ thống của tôi không thể lấy dữ liệu từ cơ sở dữ liệu. "
@@ -301,7 +311,13 @@ def get_answer(question, model_type="gpt-4o-mini"):
         print(answer)
         print("\nNguồn tham khảo:")
         for doc in result.get("source_documents", []):
-            print(f"- {doc.metadata.get('source', 'Unknown')}")
+            source = doc.metadata.get('source', 'Unknown')
+            page = doc.metadata.get('page', 'Unknown')
+            score = doc.metadata.get('score', 'Unknown')
+            print(f"- Nguồn: {source}")
+            print(f"  Trang: {page}")
+            print(f"  Độ tương đồng: {score}")
+            print(f"  Nội dung: {doc.page_content[:200]}...")
         
         return {
             "answer": answer,

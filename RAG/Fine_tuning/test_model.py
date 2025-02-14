@@ -110,42 +110,48 @@ def generate_response(prompt: str) -> str:
         raise
 
 def test_model():
-    test_prompt = """Bạn là giáo viên phòng tư vấn tuyển sinh của trường Đại học Bách Khoa Hà Nội.
-    Sử dụng thông tin sau đây để trả lời câu hỏi một cách chính xác và ngắn gọn.
-    
-    Context: Trường Đại học Bách khoa Hà Nội (tên tiếng Anh: Hanoi University of Science and Technology - HUST) 
+    test_prompt = """Bạn là một giáo viên phòng tư vấn tuyển sinh đại học Bách Khoa Hà Nội.
+ Bạn có nhiệm vụ tư vấn tuyển sinh cho người dùng và trả lời đúng những câu hỏi mà người dùng đặt ra.
+ Trả lời câu hỏi một người dùng thân thiện, chính xác. Nếu không tìm được thông tin hãy trả lời 'Vui lòng tra thêm thông tin trên website: 'https://ts.hust.edu.vn/'.
+
+### Instruction:
+{Trường mình là trường gì?}
+
+### Input:
+{Trường Đại học Bách khoa Hà Nội (tên tiếng Anh: Hanoi University of Science and Technology - HUST) 
     là trường đại học đầu ngành về kỹ thuật và công nghệ tại Việt Nam. 
-    Địa chỉ: Số 1 Đại Cồ Việt, Hai Bà Trưng, Hà Nội.
-    
-    Question: Trường Bách khoa ở đâu?
-    
-    Answer: """
-    
+    Địa chỉ: Số 1 Đại Cồ Việt, Hai Bà Trưng, Hà Nội.}
+
+### Response:
+{}"""
     response = generate_response(test_prompt)
     print("\nGenerated response:")
     print(response)
     return response
 
 if __name__ == "__main__":
-    try:
-        print("Testing fine-tuned model...")
-        result = test_model()
-        print("\nTest completed successfully!")
+    print("Testing fine-tuned model...")
+    result = test_model()
+    print("\nTest completed successfully!")
         
-        # Test thêm câu hỏi khác
-        print("\nTesting another question...")
-        test_prompt2 = """Bạn là giáo viên phòng tư vấn tuyển sinh của trường Đại học Bách Khoa Hà Nội.
-        Sử dụng thông tin sau đây để trả lời câu hỏi một cách chính xác và ngắn gọn.
+#         # Test thêm câu hỏi khác
+#         print("\nTesting another question...")
+#         test_prompt2 = """Bạn là một giáo viên phòng tư vấn tuyển sinh đại học Bách Khoa Hà Nội.
+#  Bạn có nhiệm vụ tư vấn tuyển sinh cho người dùng và trả lời đúng những câu hỏi mà người dùng đặt ra.
+#  Trả lời câu hỏi một người dùng thân thiện, chính xác. Nếu không tìm được thông tin hãy trả lời 'Vui lòng tra thêm thông tin trên website: 'https://ts.hust.edu.vn/'.
+
+# ### Instruction:
+# {Trường có mấy chương trình đào tạo kỹ sư chất lượng cao?}
+
+# ### Input:
+# {Trường Đại học Bách khoa Hà Nội có 6 chương trình đào tạo kỹ sư chất lượng cao bằng tiếng Anh: 
+#         ICT, ME, DSAI, HEDSPI, EPU, và TROY.}
+
+# ### Response:
+# {}"""
+#         result2 = generate_response(test_prompt2)
+#         print("\nGenerated response for second question:")
+#         print(result2)
         
-        Context: Trường Đại học Bách khoa Hà Nội có 6 chương trình đào tạo kỹ sư chất lượng cao bằng tiếng Anh: 
-        ICT, ME, DSAI, HEDSPI, EPU, và TROY.
-        
-        Question: Trường có mấy chương trình đào tạo kỹ sư chất lượng cao?
-        
-        Answer: """
-        result2 = generate_response(test_prompt2)
-        print("\nGenerated response for second question:")
-        print(result2)
-        
-    except Exception as e:
-        print(f"Test failed: {str(e)}") 
+#     except Exception as e:
+#         print(f"Test failed: {str(e)}") 

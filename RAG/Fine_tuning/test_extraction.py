@@ -7,79 +7,116 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from vector_db.model import (
     classify_question_domain,
     load_vector_db,
-    get_relevant_chunks
+    get_relevant_chunks,
+    load_config
 )
+from search_web import test_search
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def load_config():
+def get_data_from_db(question: str):
+    """Lấy dữ liệu từ database và xử lý"""
     try:
-        current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        config_path = os.path.join(current_dir, "vector_db", "config.json")
-        with open(config_path, 'r') as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Error loading config: {str(e)}")
-        raise
-
-def test_extraction(question: str):
-    try:
-        # Load config
+        # 1. Khởi tạo và cấu hình
         config = load_config()
         api_key = config.get("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("API key not found in config")
 
-        # Phân loại domain
+        # 2. Phân loại domain và tìm kiếm web
         domain = classify_question_domain(question)
         print(f"\nDomain được phân loại: {domain}")
+        web_url = test_search(question)
         
-        # Load vector databases
+        # 3. Load vector databases và kiểm tra
         domain_db, qa_db = load_vector_db(api_key, domain)
         print("Đã load vector databases")
         
-        # Get relevant chunks
-        chunks = get_relevant_chunks(question, domain_db, qa_db)
-        if not chunks:
+        # Thêm debug info cho database
+        domain_docs = domain_db.get()
+        qa_docs = qa_db.get()
+        print(f"Domain DB size: {len(domain_docs['ids']) if domain_docs else 0} documents")
+        print(f"QA DB size: {len(qa_docs['ids']) if qa_docs else 0} documents")
+        
+        # 4. Lấy chunks với relevance scores
+        documents = get_relevant_chunks(question, domain_db, qa_db, k=3)
+        
+        # Debug info cho chunks
+        print(f"Số lượng chunks tìm được: {len(documents)}")
+        
+        # 5. Xử lý trường hợp không có chunks
+        if not documents:
             print("\nKhông tìm thấy thông tin liên quan.")
-            return
+            return None, web_url, None
 
-        # In chi tiết từng chunk
+        # 6. Xử lý và sắp xếp chunks theo score
+        documents.sort(key=lambda x: float(x.metadata.get('score', 0)), reverse=True)
+        
+        # 7. Tạo context từ documents
+        context_parts = []
+        sources = set()
+        
         print("\nCác chunks tìm được:")
         print("=" * 50)
-        for i, chunk in enumerate(chunks, 1):
-            print(f"\nChunk {i}:")
-            print(f"Nội dung: {chunk.page_content}")
+        
+        for doc in documents:
+            print(f"\nNội dung chunk:")
+            print(f"{doc.page_content}")
+            print(f"Độ tin cậy: {doc.metadata.get('score', 'Unknown')}")
+            
+            context_parts.append(doc.page_content)
+            metadata = doc.metadata
+            
             print("\nMetadata:")
-            for key, value in chunk.metadata.items():
+            for key, value in metadata.items():
                 print(f"- {key}: {value}")
+            
+            source = metadata.get('source')
+            page = metadata.get('page')
+            
+            if source and source != 'Unknown':
+                source_info = source
+                if page and page != 'Unknown':
+                    source_info += f" (trang {page})"
+                sources.add(source_info)
+                
             print("=" * 50)
 
-        # Tổng hợp sources
-        sources = set()
-        for chunk in chunks:
-            source = chunk.metadata.get('source')
-            page = chunk.metadata.get('page')
-            if source and source != 'Unknown':
-                if page and page != 'Unknown':
-                    sources.add(f"{source} (trang {page})")
-                else:
-                    sources.add(source)
-
+        context = "\n".join(context_parts)
+        
+        # In thông tin tổng hợp
+        print(f"\nTổng số chunks phù hợp: {len(context_parts)}")
+        
         if sources:
             print("\nNguồn tham khảo:")
             for source in sources:
                 print(f"- {source}")
 
+        if context:
+            print("\nContext tổng hợp:")
+            print("-" * 50)
+            print(context)
+            print("-" * 50)
+            
+        return context, web_url, sources
+
     except Exception as e:
+        logger.error(f"Error in get_data_from_db: {str(e)}")
         print(f"Lỗi: {str(e)}")
-        logger.error(f"Error in test_extraction: {str(e)}")
+        return None, None, None
 
 if __name__ == "__main__":
-    while True:
-        question = input("\nNhập câu hỏi (hoặc 'q' để thoát): ")
-        if question.lower() == 'q':
-            break
-        
-        test_extraction(question) 
+    try:
+        while True:
+            question = input("\nNhập câu hỏi (hoặc 'q' để thoát): ")
+            if question.lower() == 'q':
+                break
+            
+            context, web_url, sources = get_data_from_db(question)
+            if context is None:
+                print(f"\nKhông tìm thấy thông tin phù hợp. Bạn có thể tham khảo thêm tại: {web_url}")
+                
+    except Exception as e:
+        print(f"Lỗi: {str(e)}")
+        logger.error(f"Error in main: {str(e)}") 
