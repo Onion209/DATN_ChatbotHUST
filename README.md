@@ -28,6 +28,16 @@ Dự án xây dựng một **trợ lý ảo hỗ trợ tuyển sinh** cho Đại
 - Hỗ trợ thí sinh và phụ huynh tra cứu thông tin tuyển sinh chính xác, nhanh chóng.
 - Cải thiện trải nghiệm tư vấn tuyển sinh bằng cách tự động hóa và cá nhân hóa thông tin.
 
+## 🛠️ Hướng dẫn sử dụng
+
+### 📦 Yêu cầu
+Trước khi chạy ứng dụng, bạn cần đảm bảo đã cài đặt các thư viện cần thiết. Có thể sử dụng `requirements.txt` nếu có, hoặc tự cài đặt các thư viện sau:
+
+```bash
+pip install streamlit chromadb
+cd RAG/vectordb
+streamlit run streamlit_app.py
+
 ## 📄 Tài liệu chi tiết
 Slide thuyết trình:https://www.canva.com/design/DAGamG-Rj18/_Ww3E7vCArRcXwUCzg5uDg/edit?utm_content=DAGamG-Rj18&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton
 > 📌 *Dự án thuộc đồ án tốt nghiệp ngành Toán Tin, Đại học Bách Khoa Hà Nội.*
