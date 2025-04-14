@@ -194,7 +194,7 @@ for message in st.session_state.chat_history:
                     st.markdown(f"**{source['name']}**")
                     
                     for i, vector in enumerate(source['vectors'], 1):
-                        st.markdown(f"Vector {i} (Score: {vector['score']})")
+                        # st.markdown(f"Vector {i} (Score: {vector['score']})")
                         st.markdown(f"{vector['content']}")
                         st.markdown("---")
                 else:  # Nếu source là string
@@ -267,7 +267,7 @@ if user_input and st.session_state.current_conversation_id:
                     if isinstance(source, dict):
                         st.markdown(f"**{source.get('name', 'Unknown')}**")
                         for i, vector in enumerate(source.get('vectors', []), 1):
-                            st.markdown(f"Vector {i} (Score: {vector.get('score', 'N/A')})")
+                            # st.markdown(f"Vector {i} (Score: {vector.get('score', 'N/A')})")
                             st.markdown(f"{vector.get('content', '')}")
                             st.markdown("---")
                     else:
